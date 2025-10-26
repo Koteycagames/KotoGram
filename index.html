@@ -72,6 +72,9 @@
         .sidebar-header {
             font-weight: bold;
             margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         .chat-list {
@@ -178,7 +181,10 @@
     <!-- Главная страница мессенджера -->
     <div id="main">
         <div class="sidebar">
-            <div class="sidebar-header">Чаты</div>
+            <div class="sidebar-header">
+                <span>Чаты</span>
+                <button onclick="logout()" style="width: auto; padding: 5px 10px;">Выйти</button>
+            </div>
             <div class="new-chat">
                 <input type="email" id="new-chat-email" placeholder="Email собеседника">
                 <button onclick="startNewChat()">Начать чат</button>
@@ -198,7 +204,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getDatabase, ref, push, onValue, set, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
         const firebaseConfig = {
@@ -232,17 +238,27 @@
                 const snapshot = await get(userRef);
                 if (!snapshot.exists()) {
                     console.log('Пользователь отсутствует в /users, добавляем:', user.email);
-                    await set(userRef, { email: user.email });
+                    await set(userRef, { email: user.email.toLowerCase() });
                     console.log('Пользователь добавлен в базу:', user.email);
                 } else {
                     const existingEmail = snapshot.val().email;
-                    if (existingEmail !== user.email) {
+                    if (existingEmail.toLowerCase() !== user.email.toLowerCase()) {
                         console.warn('Email в базе отличается:', existingEmail, 'ожидается:', user.email);
-                        await set(userRef, { email: user.email });
+                        await set(userRef, { email: user.email.toLowerCase() });
                         console.log('Email пользователя обновлён:', user.email);
                     } else {
                         console.log('Пользователь уже в базе:', user.email);
                     }
+                }
+                // Дополнительная проверка всех пользователей
+                const usersSnapshot = await get(ref(window.db, 'users'));
+                if (usersSnapshot.exists()) {
+                    console.log('Текущие пользователи в /users:');
+                    usersSnapshot.forEach((childSnapshot) => {
+                        console.log(`- UID: ${childSnapshot.key}, Email: ${childSnapshot.val().email}`);
+                    });
+                } else {
+                    console.log('Нет пользователей в /users');
                 }
             } catch (error) {
                 console.error('Ошибка проверки/добавления пользователя в базу:', error);
@@ -266,7 +282,7 @@
 
         window.register = function() {
             console.log('Кнопка регистрации нажата');
-            const email = document.getElementById('register-email').value.trim();
+            const email = document.getElementById('register-email').value.trim().toLowerCase();
             const password = document.getElementById('register-password').value;
             if (!email || !password) {
                 alert('Заполните email и пароль!');
@@ -275,7 +291,7 @@
             }
             createUserWithEmailAndPassword(window.auth, email, password)
                 .then((userCredential) => {
-                    console.log('Регистрация успешна:', userCredential.user.email);
+                    console.log('Регистрация успешна:', userCredential.user.email, userCredential.user.uid);
                     const userRef = ref(window.db, 'users/' + userCredential.user.uid);
                     set(userRef, { email: email })
                         .then(() => {
@@ -296,7 +312,7 @@
 
         window.login = function() {
             console.log('Кнопка входа нажата');
-            const email = document.getElementById('login-email').value.trim();
+            const email = document.getElementById('login-email').value.trim().toLowerCase();
             const password = document.getElementById('login-password').value;
             if (!email || !password) {
                 alert('Заполните email и пароль!');
@@ -317,6 +333,24 @@
                 });
         };
 
+        window.logout = function() {
+            console.log('Выход из аккаунта');
+            signOut(window.auth).then(() => {
+                console.log('Выход успешен');
+                document.getElementById('main').style.display = 'none';
+                document.getElementById('login').style.display = 'block';
+                document.getElementById('chat-list').innerHTML = '';
+                document.getElementById('messages').innerHTML = '';
+                document.getElementById('chat-header').textContent = 'Выберите чат';
+                currentChat = null;
+                currentChatPartnerEmail = '';
+                alert('Вы вышли из аккаунта');
+            }).catch((error) => {
+                console.error('Ошибка выхода:', error);
+                alert('Ошибка выхода: ' + error.message);
+            });
+        };
+
         function showMain() {
             console.log('Показ главной страницы, текущий пользователь:', window.auth.currentUser?.email, window.auth.currentUser?.uid);
             document.getElementById('login').style.display = 'none';
@@ -327,7 +361,7 @@
 
         window.startNewChat = function() {
             console.log('Начать новый чат');
-            const recipientEmail = document.getElementById('new-chat-email').value.trim();
+            const recipientEmail = document.getElementById('new-chat-email').value.trim().toLowerCase();
             console.log('Введён email собеседника:', recipientEmail);
             if (!recipientEmail) {
                 alert('Введите email собеседника!');
@@ -340,7 +374,7 @@
                 return;
             }
             console.log('Текущий пользователь:', window.auth.currentUser.email, window.auth.currentUser.uid);
-            if (recipientEmail === window.auth.currentUser.email) {
+            if (recipientEmail === window.auth.currentUser.email.toLowerCase()) {
                 alert('Нельзя начать чат с самим собой!');
                 console.error('Введён email текущего пользователя:', recipientEmail);
                 return;
@@ -350,10 +384,11 @@
             get(ref(window.db, 'users')).then((snapshot) => {
                 let recipientUid = null;
                 if (snapshot.exists()) {
+                    console.log('Проверка пользователей в /users:');
                     snapshot.forEach((childSnapshot) => {
-                        const userEmail = childSnapshot.val().email;
+                        const userEmail = childSnapshot.val().email.toLowerCase();
                         const userUid = childSnapshot.key;
-                        console.log('Проверка пользователя:', userEmail, userUid);
+                        console.log(`- UID: ${userUid}, Email: ${userEmail}`);
                         if (userEmail === recipientEmail) {
                             recipientUid = userUid;
                         }
