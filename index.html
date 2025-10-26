@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Мессенджер с Firebase</title>
-    <link rel="icon" href="/favicon.ico"> <!-- Добавляем favicon, чтобы убрать 404 -->
+    <link rel="icon" href="/favicon.ico">
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -224,6 +224,25 @@
         let currentChat = null;
         let currentChatPartnerEmail = '';
 
+        // Проверяем и добавляем пользователя в /users при входе
+        async function ensureUserInDatabase(user) {
+            console.log('Проверка пользователя в базе:', user.email, user.uid);
+            const userRef = ref(window.db, 'users/' + user.uid);
+            try {
+                const snapshot = await get(userRef);
+                if (!snapshot.exists()) {
+                    console.log('Пользователь отсутствует в /users, добавляем:', user.email);
+                    await set(userRef, { email: user.email });
+                    console.log('Пользователь добавлен в базу:', user.email);
+                } else {
+                    console.log('Пользователь уже в базе:', user.email);
+                }
+            } catch (error) {
+                console.error('Ошибка проверки/добавления пользователя в базу:', error);
+                alert('Ошибка проверки пользователя: ' + error.message);
+            }
+        }
+
         document.getElementById('login').style.display = 'block';
 
         window.showRegister = function() {
@@ -281,8 +300,11 @@
             signInWithEmailAndPassword(window.auth, email, password)
                 .then((userCredential) => {
                     console.log('Вход успешен:', userCredential.user.email);
-                    alert('Вход успешен!');
-                    showMain();
+                    // Проверяем и добавляем пользователя в /users
+                    ensureUserInDatabase(userCredential.user).then(() => {
+                        alert('Вход успешен!');
+                        showMain();
+                    });
                 })
                 .catch((error) => {
                     console.error('Ошибка входа:', error.code, error.message);
@@ -334,9 +356,15 @@
                     console.error('Пользователь не найден:', recipientEmail);
                     return;
                 }
+                if (recipientUid === window.auth.currentUser.uid) {
+                    alert('Нельзя начать чат с самим собой!');
+                    console.error('recipientUid совпадает с текущим пользователем:', recipientUid);
+                    return;
+                }
 
                 // Проверяем, не существует ли уже чат
                 const chatId = [window.auth.currentUser.uid, recipientUid].sort().join('_');
+                console.log('Формирование chatId:', chatId);
                 get(ref(window.db, 'chats/' + chatId)).then((chatSnapshot) => {
                     if (chatSnapshot.exists()) {
                         alert('Чат с этим пользователем уже существует!');
@@ -393,7 +421,11 @@
                     const chatId = childSnapshot.key;
                     const chatData = childSnapshot.val();
                     console.log('Обработка чата:', chatId, chatData);
-                    if (chatData.participants && chatData.participants[window.auth.currentUser.uid]) {
+                    if (!chatData.participants) {
+                        console.error('Некорректные данные чата, отсутствуют participants:', chatId);
+                        return;
+                    }
+                    if (chatData.participants[window.auth.currentUser.uid]) {
                         // Находим email собеседника
                         const participantIds = Object.keys(chatData.participants);
                         const otherUserId = participantIds.find(id => id !== window.auth.currentUser.uid);
