@@ -235,7 +235,14 @@
                     await set(userRef, { email: user.email });
                     console.log('Пользователь добавлен в базу:', user.email);
                 } else {
-                    console.log('Пользователь уже в базе:', user.email);
+                    const existingEmail = snapshot.val().email;
+                    if (existingEmail !== user.email) {
+                        console.warn('Email в базе отличается:', existingEmail, 'ожидается:', user.email);
+                        await set(userRef, { email: user.email });
+                        console.log('Email пользователя обновлён:', user.email);
+                    } else {
+                        console.log('Пользователь уже в базе:', user.email);
+                    }
                 }
             } catch (error) {
                 console.error('Ошибка проверки/добавления пользователя в базу:', error);
@@ -298,7 +305,7 @@
             }
             signInWithEmailAndPassword(window.auth, email, password)
                 .then((userCredential) => {
-                    console.log('Вход успешен:', userCredential.user.email);
+                    console.log('Вход успешен:', userCredential.user.email, userCredential.user.uid);
                     ensureUserInDatabase(userCredential.user).then(() => {
                         alert('Вход успешен!');
                         showMain();
@@ -311,7 +318,7 @@
         };
 
         function showMain() {
-            console.log('Показ главной страницы');
+            console.log('Показ главной страницы, текущий пользователь:', window.auth.currentUser?.email, window.auth.currentUser?.uid);
             document.getElementById('login').style.display = 'none';
             document.getElementById('register').style.display = 'none';
             document.getElementById('main').style.display = 'flex';
@@ -332,6 +339,7 @@
                 console.error('Пользователь не авторизован');
                 return;
             }
+            console.log('Текущий пользователь:', window.auth.currentUser.email, window.auth.currentUser.uid);
             if (recipientEmail === window.auth.currentUser.email) {
                 alert('Нельзя начать чат с самим собой!');
                 console.error('Введён email текущего пользователя:', recipientEmail);
@@ -403,7 +411,7 @@
         };
 
         window.loadChats = function() {
-            console.log('Загрузка чатов для пользователя:', window.auth.currentUser?.uid);
+            console.log('Загрузка чатов для пользователя:', window.auth.currentUser?.email, window.auth.currentUser?.uid);
             const chatList = document.getElementById('chat-list');
             chatList.innerHTML = '';
             if (!window.auth.currentUser) {
