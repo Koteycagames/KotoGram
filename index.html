@@ -202,10 +202,10 @@
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
         import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
 
-        // Конфигурация Firebase (замени на свои данные из Firebase консоли)
+        // Конфигурация Firebase (вставлена твоя)
         const firebaseConfig = {
             apiKey: "AIzaSyBKp-HUZXSGSfBfEhl-HIjaC3Yflpqxg7s",
-            authDomain: ".firebaseapp.com",
+            authDomain: "kotogram-9b0b9.firebaseapp.com",
             databaseURL: "https://kotogram-9b0b9-default-rtdb.firebaseio.com",
             projectId: "kotogram-9b0b9",
             storageBucket: "kotogram-9b0b9.firebasestorage.app",
@@ -240,13 +240,18 @@
         function register() {
             const email = document.getElementById('register-email').value;
             const password = document.getElementById('register-password').value;
+            if (!email || !password) {
+                alert('Заполните email и пароль!');
+                return;
+            }
             createUserWithEmailAndPassword(auth, email, password)
                 .then((userCredential) => {
                     alert('Регистрация успешна!');
                     showMain();
                 })
                 .catch((error) => {
-                    alert(error.message);
+                    console.error(error);
+                    alert('Ошибка регистрации: ' + error.message);
                 });
         }
 
@@ -254,13 +259,18 @@
         function login() {
             const email = document.getElementById('login-email').value;
             const password = document.getElementById('login-password').value;
+            if (!email || !password) {
+                alert('Заполните email и пароль!');
+                return;
+            }
             signInWithEmailAndPassword(auth, email, password)
                 .then((userCredential) => {
                     alert('Вход успешен!');
                     showMain();
                 })
                 .catch((error) => {
-                    alert(error.message);
+                    console.error(error);
+                    alert('Ошибка входа: ' + error.message);
                 });
         }
 
