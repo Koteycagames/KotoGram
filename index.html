@@ -224,7 +224,7 @@
         let currentChat = null;
         let currentChatPartnerEmail = '';
 
-        // Проверяем и добавляем пользователя в /users при входе
+        // Проверяем и добавляем пользователя в /users
         async function ensureUserInDatabase(user) {
             console.log('Проверка пользователя в базе:', user.email, user.uid);
             const userRef = ref(window.db, 'users/' + user.uid);
@@ -259,7 +259,7 @@
 
         window.register = function() {
             console.log('Кнопка регистрации нажата');
-            const email = document.getElementById('register-email').value;
+            const email = document.getElementById('register-email').value.trim();
             const password = document.getElementById('register-password').value;
             if (!email || !password) {
                 alert('Заполните email и пароль!');
@@ -269,7 +269,6 @@
             createUserWithEmailAndPassword(window.auth, email, password)
                 .then((userCredential) => {
                     console.log('Регистрация успешна:', userCredential.user.email);
-                    // Сохраняем email и UID в базе
                     const userRef = ref(window.db, 'users/' + userCredential.user.uid);
                     set(userRef, { email: email })
                         .then(() => {
@@ -290,7 +289,7 @@
 
         window.login = function() {
             console.log('Кнопка входа нажата');
-            const email = document.getElementById('login-email').value;
+            const email = document.getElementById('login-email').value.trim();
             const password = document.getElementById('login-password').value;
             if (!email || !password) {
                 alert('Заполните email и пароль!');
@@ -300,7 +299,6 @@
             signInWithEmailAndPassword(window.auth, email, password)
                 .then((userCredential) => {
                     console.log('Вход успешен:', userCredential.user.email);
-                    // Проверяем и добавляем пользователя в /users
                     ensureUserInDatabase(userCredential.user).then(() => {
                         alert('Вход успешен!');
                         showMain();
@@ -323,6 +321,7 @@
         window.startNewChat = function() {
             console.log('Начать новый чат');
             const recipientEmail = document.getElementById('new-chat-email').value.trim();
+            console.log('Введён email собеседника:', recipientEmail);
             if (!recipientEmail) {
                 alert('Введите email собеседника!');
                 console.error('Пустой email собеседника');
@@ -335,7 +334,7 @@
             }
             if (recipientEmail === window.auth.currentUser.email) {
                 alert('Нельзя начать чат с самим собой!');
-                console.error('Попытка начать чат с самим собой');
+                console.error('Введён email текущего пользователя:', recipientEmail);
                 return;
             }
 
@@ -344,8 +343,11 @@
                 let recipientUid = null;
                 if (snapshot.exists()) {
                     snapshot.forEach((childSnapshot) => {
-                        if (childSnapshot.val().email === recipientEmail) {
-                            recipientUid = childSnapshot.key;
+                        const userEmail = childSnapshot.val().email;
+                        const userUid = childSnapshot.key;
+                        console.log('Проверка пользователя:', userEmail, userUid);
+                        if (userEmail === recipientEmail) {
+                            recipientUid = userUid;
                         }
                     });
                 } else {
@@ -369,7 +371,7 @@
                     if (chatSnapshot.exists()) {
                         alert('Чат с этим пользователем уже существует!');
                         console.log('Чат уже существует:', chatId);
-                        loadChats(); // Перезагружаем список чатов
+                        loadChats();
                         return;
                     }
 
@@ -426,7 +428,6 @@
                         return;
                     }
                     if (chatData.participants[window.auth.currentUser.uid]) {
-                        // Находим email собеседника
                         const participantIds = Object.keys(chatData.participants);
                         const otherUserId = participantIds.find(id => id !== window.auth.currentUser.uid);
                         if (!otherUserId) {
@@ -507,7 +508,6 @@
                     timestamp: Date.now()
                 }).then(() => {
                     console.log('Сообщение отправлено');
-                    // Обновляем lastMessage в чате
                     const chatRef = ref(window.db, 'chats/' + currentChat);
                     get(chatRef).then((snapshot) => {
                         if (snapshot.exists()) {
