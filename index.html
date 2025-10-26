@@ -313,34 +313,48 @@
             // Проверяем, существует ли пользователь с таким email
             get(ref(window.db, 'users')).then((snapshot) => {
                 let recipientUid = null;
-                snapshot.forEach((childSnapshot) => {
-                    if (childSnapshot.val().email === recipientEmail) {
-                        recipientUid = childSnapshot.key;
-                    }
-                });
+                if (snapshot.exists()) {
+                    snapshot.forEach((childSnapshot) => {
+                        if (childSnapshot.val().email === recipientEmail) {
+                            recipientUid = childSnapshot.key;
+                        }
+                    });
+                }
                 if (!recipientUid) {
                     alert('Пользователь с таким email не найден!');
                     console.error('Пользователь не найден:', recipientEmail);
                     return;
                 }
 
-                // Создаём уникальный ID чата
+                // Проверяем, не существует ли уже чат
                 const chatId = [window.auth.currentUser.uid, recipientUid].sort().join('_');
-                const chatRef = ref(window.db, 'chats/' + chatId);
-                set(chatRef, {
-                    participants: {
-                        [window.auth.currentUser.uid]: true,
-                        [recipientUid]: true
-                    },
-                    lastMessage: '',
-                    timestamp: Date.now()
-                }).then(() => {
-                    console.log('Чат создан:', chatId);
-                    document.getElementById('new-chat-email').value = '';
-                    loadChats();
+                get(ref(window.db, 'chats/' + chatId)).then((chatSnapshot) => {
+                    if (chatSnapshot.exists()) {
+                        alert('Чат с этим пользователем уже существует!');
+                        console.log('Чат уже существует:', chatId);
+                        return;
+                    }
+
+                    // Создаём чат
+                    const chatRef = ref(window.db, 'chats/' + chatId);
+                    set(chatRef, {
+                        participants: {
+                            [window.auth.currentUser.uid]: true,
+                            [recipientUid]: true
+                        },
+                        lastMessage: '',
+                        timestamp: Date.now()
+                    }).then(() => {
+                        console.log('Чат создан:', chatId);
+                        document.getElementById('new-chat-email').value = '';
+                        loadChats();
+                    }).catch((error) => {
+                        console.error('Ошибка создания чата:', error);
+                        alert('Ошибка создания чата: ' + error.message);
+                    });
                 }).catch((error) => {
-                    console.error('Ошибка создания чата:', error);
-                    alert('Ошибка создания чата: ' + error.message);
+                    console.error('Ошибка проверки чата:', error);
+                    alert('Ошибка проверки чата: ' + error.message);
                 });
             }).catch((error) => {
                 console.error('Ошибка проверки пользователя:', error);
@@ -355,6 +369,10 @@
             const chatsRef = ref(window.db, 'chats');
             onValue(chatsRef, (snapshot) => {
                 chatList.innerHTML = '';
+                if (!snapshot.exists()) {
+                    console.log('Чаты отсутствуют');
+                    return;
+                }
                 snapshot.forEach((childSnapshot) => {
                     const chatId = childSnapshot.key;
                     const chatData = childSnapshot.val();
@@ -363,18 +381,24 @@
                         const participantIds = Object.keys(chatData.participants);
                         const otherUserId = participantIds.find(id => id !== window.auth.currentUser.uid);
                         get(ref(window.db, 'users/' + otherUserId)).then((userSnapshot) => {
-                            const otherUserEmail = userSnapshot.val().email;
-                            const li = document.createElement('li');
-                            li.classList.add('chat-item');
-                            li.textContent = otherUserEmail;
-                            li.onclick = () => {
-                                currentChat = chatId;
-                                currentChatPartnerEmail = otherUserEmail;
-                                document.getElementById('chat-header').textContent = otherUserEmail;
-                                document.getElementById('messages').innerHTML = '';
-                                loadMessages(chatId);
-                            };
-                            chatList.appendChild(li);
+                            if (userSnapshot.exists()) {
+                                const otherUserEmail = userSnapshot.val().email;
+                                const li = document.createElement('li');
+                                li.classList.add('chat-item');
+                                li.textContent = otherUserEmail;
+                                li.onclick = () => {
+                                    currentChat = chatId;
+                                    currentChatPartnerEmail = otherUserEmail;
+                                    document.getElementById('chat-header').textContent = otherUserEmail;
+                                    document.getElementById('messages').innerHTML = '';
+                                    loadMessages(chatId);
+                                };
+                                chatList.appendChild(li);
+                            } else {
+                                console.error('Пользователь не найден в /users:', otherUserId);
+                            }
+                        }).catch((error) => {
+                            console.error('Ошибка загрузки данных пользователя:', error);
                         });
                     }
                 });
@@ -390,6 +414,10 @@
             onValue(messagesRef, (snapshot) => {
                 const messagesDiv = document.getElementById('messages');
                 messagesDiv.innerHTML = '';
+                if (!snapshot.exists()) {
+                    console.log('Сообщения отсутствуют для чата:', chatId);
+                    return;
+                }
                 snapshot.forEach((childSnapshot) => {
                     const message = childSnapshot.val();
                     const messageElem = document.createElement('div');
@@ -424,13 +452,13 @@
                     console.log('Сообщение отправлено');
                     // Обновляем lastMessage в чате
                     const chatRef = ref(window.db, 'chats/' + currentChat);
-                    set(chatRef, {
-                        participants: {
-                            [window.auth.currentUser.uid]: true,
-                            [Object.keys(get(ref(window.db, 'chats/' + currentChat)).then(s => s.val().participants)).find(id => id !== window.auth.currentUser.uid)]: true
-                        },
-                        lastMessage: text,
-                        timestamp: Date.now()
+                    get(chatRef).then((snapshot) => {
+                        const chatData = snapshot.val();
+                        set(chatRef, {
+                            participants: chatData.participants,
+                            lastMessage: text,
+                            timestamp: Date.now()
+                        });
                     });
                     input.value = '';
                 }).catch((error) => {
