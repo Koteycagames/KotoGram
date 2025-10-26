@@ -189,16 +189,11 @@
         </div>
     </div>
 
-    <!-- Подключение Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-    <script>
-        // Проверка загрузки Firebase SDK
-        console.log('Проверка Firebase:', typeof firebase !== 'undefined' ? 'Firebase загружен' : 'Firebase НЕ загружен');
-
-        // Конфигурация Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyBKp-HUZXSGSfBfEhl-HIjaC3Yflpqxg7s",
             authDomain: "kotogram-9b0b9.firebaseapp.com",
@@ -209,11 +204,10 @@
             appId: "1:755607509917:web:29b1b85eea516bde702d74"
         };
 
-        // Инициализация Firebase
         try {
-            const app = firebase.initializeApp(firebaseConfig);
-            window.auth = firebase.auth();
-            window.db = firebase.database();
+            const app = initializeApp(firebaseConfig);
+            window.auth = getAuth(app);
+            window.db = getDatabase(app);
             console.log('Firebase инициализирован успешно!');
         } catch (error) {
             console.error('Ошибка инициализации Firebase:', error);
@@ -222,10 +216,8 @@
 
         let currentChat = null;
 
-        // Показать окно входа
         document.getElementById('login').style.display = 'block';
 
-        // Функции
         window.showRegister = function() {
             console.log('Переход к регистрации');
             document.getElementById('login').style.display = 'none';
@@ -247,12 +239,7 @@
                 console.error('Пустой email или пароль при регистрации');
                 return;
             }
-            if (!window.auth) {
-                alert('Firebase Auth не инициализирован!');
-                console.error('Firebase Auth не инициализирован');
-                return;
-            }
-            window.auth.createUserWithEmailAndPassword(email, password)
+            createUserWithEmailAndPassword(window.auth, email, password)
                 .then((userCredential) => {
                     console.log('Регистрация успешна:', userCredential.user.email);
                     alert('Регистрация успешна!');
@@ -273,12 +260,7 @@
                 console.error('Пустой email или пароль при входе');
                 return;
             }
-            if (!window.auth) {
-                alert('Firebase Auth не инициализирован!');
-                console.error('Firebase Auth не инициализирован');
-                return;
-            }
-            window.auth.signInWithEmailAndPassword(email, password)
+            signInWithEmailAndPassword(window.auth, email, password)
                 .then((userCredential) => {
                     console.log('Вход успешен:', userCredential.user.email);
                     alert('Вход успешен!');
@@ -293,7 +275,7 @@
         function showMain() {
             console.log('Показ главной страницы');
             document.getElementById('login').style.display = 'none';
-            document.getElementById('register').style.display = Firebase Auth не инициализирован!');
+            document.getElementById('register').style.display = 'none';
             document.getElementById('main').style.display = 'flex';
             loadChats();
         }
@@ -313,13 +295,8 @@
 
         function loadMessages(chatId) {
             console.log('Загрузка сообщений для чата:', chatId);
-            if (!window.db) {
-                alert('Firebase Database не инициализирован!');
-                console.error('Firebase Database не инициализирован');
-                return;
-            }
-            const messagesRef = window.db.ref('messages/' + chatId);
-            messagesRef.on('value', (snapshot) => {
+            const messagesRef = ref(window.db, 'messages/' + chatId);
+            onValue(messagesRef, (snapshot) => {
                 const messagesDiv = document.getElementById('messages');
                 messagesDiv.innerHTML = '';
                 snapshot.forEach((childSnapshot) => {
@@ -344,16 +321,11 @@
                 console.error('Чат не выбран');
                 return;
             }
-            if (!window.db) {
-                alert('Firebase Database не инициализирован!');
-                console.error('Firebase Database не инициализирован');
-                return;
-            }
             const input = document.getElementById('message-input');
             const text = input.value.trim();
             if (text) {
-                const messagesRef = window.db.ref('messages/' + currentChat);
-                messagesRef.push({
+                const messagesRef = ref(window.db, 'messages/' + currentChat);
+                push(messagesRef, {
                     sender: window.auth.currentUser.uid,
                     text: text,
                     timestamp: Date.now()
