@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -16,7 +17,6 @@
             height: 100vh;
         }
 
-        /* Стили для форм входа и регистрации */
         .auth-container {
             background-color: white;
             padding: 20px;
@@ -54,7 +54,6 @@
             cursor: pointer;
         }
 
-        /* Стили для главной страницы (похоже на Telegram) */
         #main {
             display: none;
             width: 100%;
@@ -94,7 +93,7 @@
             flex: 1;
             display: flex;
             flex-direction: column;
-            background-color: #e5ddd5; /* Фон как в Telegram */
+            background-color: #e5ddd5;
         }
 
         .chat-header {
@@ -147,7 +146,6 @@
             border-radius: 20px;
         }
 
-        /* Скрытие секций */
         #login, #register {
             display: none;
         }
@@ -178,17 +176,13 @@
         <div class="sidebar">
             <div class="sidebar-header">Чаты</div>
             <ul class="chat-list">
-                <!-- Здесь будут динамически добавляться чаты -->
                 <li class="chat-item" onclick="openChat('chat1')">Чат 1</li>
                 <li class="chat-item" onclick="openChat('chat2')">Чат 2</li>
-                <!-- Добавь больше по мере необходимости -->
             </ul>
         </div>
         <div class="chat-area">
             <div class="chat-header">Выберите чат</div>
-            <div class="messages" id="messages">
-                <!-- Сообщения будут здесь -->
-            </div>
+            <div class="messages" id="messages"></div>
             <div class="input-area">
                 <input type="text" id="message-input" placeholder="Введите сообщение...">
                 <button onclick="sendMessage()">Отправить</button>
@@ -197,12 +191,10 @@
     </div>
 
     <script type="module">
-        // Импорт Firebase
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
         import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
 
-        // Конфигурация Firebase (вставлена твоя)
         const firebaseConfig = {
             apiKey: "AIzaSyBKp-HUZXSGSfBfEhl-HIjaC3Yflpqxg7s",
             authDomain: "kotogram-9b0b9.firebaseapp.com",
@@ -213,92 +205,99 @@
             appId: "1:755607509917:web:29b1b85eea516bde702d74"
         };
 
-        // Инициализация Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getDatabase(app);
+        try {
+            const app = initializeApp(firebaseConfig);
+            window.auth = getAuth(app); // Делаем auth глобальным
+            window.db = getDatabase(app); // Делаем db глобальным
+            console.log('Firebase инициализирован успешно!');
+        } catch (error) {
+            console.error('Ошибка инициализации Firebase:', error);
+            alert('Ошибка инициализации Firebase: ' + error.message);
+        }
 
-        // Текущий чат ID (по умолчанию null)
         let currentChat = null;
 
-        // Показать окно входа по умолчанию
         document.getElementById('login').style.display = 'block';
 
-        // Функция показа регистрации
-        function showRegister() {
+        // Экспортируем функции в глобальную область
+        window.showRegister = function() {
+            console.log('Переход к регистрации');
             document.getElementById('login').style.display = 'none';
             document.getElementById('register').style.display = 'block';
-        }
+        };
 
-        // Функция показа входа
-        function showLogin() {
+        window.showLogin = function() {
+            console.log('Переход к входу');
             document.getElementById('register').style.display = 'none';
             document.getElementById('login').style.display = 'block';
-        }
+        };
 
-        // Функция регистрации
-        function register() {
+        window.register = function() {
+            console.log('Кнопка регистрации нажата');
             const email = document.getElementById('register-email').value;
             const password = document.getElementById('register-password').value;
             if (!email || !password) {
                 alert('Заполните email и пароль!');
+                console.error('Пустой email или пароль при регистрации');
                 return;
             }
-            createUserWithEmailAndPassword(auth, email, password)
+            createUserWithEmailAndPassword(window.auth, email, password)
                 .then((userCredential) => {
+                    console.log('Регистрация успешна:', userCredential.user.email);
                     alert('Регистрация успешна!');
                     showMain();
                 })
                 .catch((error) => {
-                    console.error(error);
-                    alert('Ошибка регистрации: ' + error.message);
+                    console.error('Ошибка регистрации:', error.code, error.message);
+                    alert('Ошибка регистрации: ' + error.message + ' (код: ' + error.code + ')');
                 });
-        }
+        };
 
-        // Функция входа
-        function login() {
+        window.login = function() {
+            console.log('Кнопка входа нажата');
             const email = document.getElementById('login-email').value;
             const password = document.getElementById('login-password').value;
             if (!email || !password) {
                 alert('Заполните email и пароль!');
+                console.error('Пустой email или пароль при входе');
                 return;
             }
-            signInWithEmailAndPassword(auth, email, password)
+            signInWithEmailAndPassword(window.auth, email, password)
                 .then((userCredential) => {
+                    console.log('Вход успешен:', userCredential.user.email);
                     alert('Вход успешен!');
                     showMain();
                 })
                 .catch((error) => {
-                    console.error(error);
-                    alert('Ошибка входа: ' + error.message);
+                    console.error('Ошибка входа:', error.code, error.message);
+                    alert('Ошибка входа: ' + error.message + ' (код: ' + error.code + ')');
                 });
-        }
+        };
 
-        // Показать главную страницу
         function showMain() {
+            console.log('Показ главной страницы');
             document.getElementById('login').style.display = 'none';
             document.getElementById('register').style.display = 'none';
             document.getElementById('main').style.display = 'flex';
-            loadChats(); // Загрузить список чатов (пока статично, потом динамично)
+            loadChats();
         }
 
-        // Загрузка списка чатов (пока пример, можно расширить с DB)
         function loadChats() {
-            // Здесь можно загрузить чаты из Firebase Realtime Database
-            // Например, onValue(ref(db, 'chats/' + auth.currentUser.uid), (snapshot) => { ... });
+            console.log('Загрузка чатов');
+            // Здесь можно добавить динамическую загрузку из Firebase
         }
 
-        // Открытие чата
-        function openChat(chatId) {
+        window.openChat = function(chatId) {
+            console.log('Открытие чата:', chatId);
             currentChat = chatId;
             document.querySelector('.chat-header').textContent = chatId;
             document.getElementById('messages').innerHTML = '';
             loadMessages(chatId);
-        }
+        };
 
-        // Загрузка сообщений из Realtime Database
         function loadMessages(chatId) {
-            const messagesRef = ref(db, 'messages/' + chatId);
+            console.log('Загрузка сообщений для чата:', chatId);
+            const messagesRef = ref(window.db, 'messages/' + chatId);
             onValue(messagesRef, (snapshot) => {
                 const messagesDiv = document.getElementById('messages');
                 messagesDiv.innerHTML = '';
@@ -306,32 +305,41 @@
                     const message = childSnapshot.val();
                     const messageElem = document.createElement('div');
                     messageElem.classList.add('message');
-                    messageElem.classList.add(message.sender === auth.currentUser.uid ? 'sent' : 'received');
+                    messageElem.classList.add(message.sender === window.auth.currentUser.uid ? 'sent' : 'received');
                     messageElem.textContent = message.text;
                     messagesDiv.appendChild(messageElem);
                 });
                 messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }, (error) => {
+                console.error('Ошибка загрузки сообщений:', error);
+                alert('Ошибка загрузки сообщений: ' + error.message);
             });
         }
 
-        // Отправка сообщения
-        function sendMessage() {
+        window.sendMessage = function() {
+            console.log('Отправка сообщения');
             if (!currentChat) {
                 alert('Выберите чат!');
+                console.error('Чат не выбран');
                 return;
             }
             const input = document.getElementById('message-input');
             const text = input.value.trim();
             if (text) {
-                const messagesRef = ref(db, 'messages/' + currentChat);
+                const messagesRef = ref(window.db, 'messages/' + currentChat);
                 push(messagesRef, {
-                    sender: auth.currentUser.uid,
+                    sender: window.auth.currentUser.uid,
                     text: text,
                     timestamp: Date.now()
+                }).then(() => {
+                    console.log('Сообщение отправлено');
+                    input.value = '';
+                }).catch((error) => {
+                    console.error('Ошибка отправки сообщения:', error);
+                    alert('Ошибка отправки сообщения: ' + error.message);
                 });
-                input.value = '';
             }
-        }
+        };
     </script>
 </body>
 </html>
