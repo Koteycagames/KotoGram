@@ -319,6 +319,8 @@
                             recipientUid = childSnapshot.key;
                         }
                     });
+                } else {
+                    console.log('Нет пользователей в /users');
                 }
                 if (!recipientUid) {
                     alert('Пользователь с таким email не найден!');
@@ -332,6 +334,7 @@
                     if (chatSnapshot.exists()) {
                         alert('Чат с этим пользователем уже существует!');
                         console.log('Чат уже существует:', chatId);
+                        loadChats(); // Перезагружаем список чатов
                         return;
                     }
 
@@ -363,7 +366,7 @@
         };
 
         function loadChats() {
-            console.log('Загрузка чатов');
+            console.log('Загрузка чатов для пользователя:', window.auth.currentUser?.uid);
             const chatList = document.getElementById('chat-list');
             chatList.innerHTML = '';
             const chatsRef = ref(window.db, 'chats');
@@ -371,18 +374,25 @@
                 chatList.innerHTML = '';
                 if (!snapshot.exists()) {
                     console.log('Чаты отсутствуют');
+                    chatList.innerHTML = '<li>Нет чатов</li>';
                     return;
                 }
                 snapshot.forEach((childSnapshot) => {
                     const chatId = childSnapshot.key;
                     const chatData = childSnapshot.val();
-                    if (chatData.participants[window.auth.currentUser.uid]) {
+                    console.log('Обработка чата:', chatId, chatData);
+                    if (chatData.participants && chatData.participants[window.auth.currentUser.uid]) {
                         // Находим email собеседника
                         const participantIds = Object.keys(chatData.participants);
                         const otherUserId = participantIds.find(id => id !== window.auth.currentUser.uid);
+                        if (!otherUserId) {
+                            console.error('Не найден собеседник для чата:', chatId);
+                            return;
+                        }
                         get(ref(window.db, 'users/' + otherUserId)).then((userSnapshot) => {
                             if (userSnapshot.exists()) {
                                 const otherUserEmail = userSnapshot.val().email;
+                                console.log('Добавление чата в список:', chatId, 'собеседник:', otherUserEmail);
                                 const li = document.createElement('li');
                                 li.classList.add('chat-item');
                                 li.textContent = otherUserEmail;
@@ -398,8 +408,10 @@
                                 console.error('Пользователь не найден в /users:', otherUserId);
                             }
                         }).catch((error) => {
-                            console.error('Ошибка загрузки данных пользователя:', error);
+                            console.error('Ошибка загрузки данных пользователя:', otherUserId, error);
                         });
+                    } else {
+                        console.log('Чат не принадлежит текущему пользователю:', chatId);
                     }
                 });
             }, (error) => {
@@ -453,12 +465,14 @@
                     // Обновляем lastMessage в чате
                     const chatRef = ref(window.db, 'chats/' + currentChat);
                     get(chatRef).then((snapshot) => {
-                        const chatData = snapshot.val();
-                        set(chatRef, {
-                            participants: chatData.participants,
-                            lastMessage: text,
-                            timestamp: Date.now()
-                        });
+                        if (snapshot.exists()) {
+                            const chatData = snapshot.val();
+                            set(chatRef, {
+                                participants: chatData.participants,
+                                lastMessage: text,
+                                timestamp: Date.now()
+                            });
+                        }
                     });
                     input.value = '';
                 }).catch((error) => {
