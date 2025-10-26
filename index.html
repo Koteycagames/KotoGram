@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Мессенджер с Firebase</title>
+    <link rel="icon" href="/favicon.ico"> <!-- Добавляем favicon, чтобы убрать 404 -->
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -181,6 +182,7 @@
             <div class="new-chat">
                 <input type="email" id="new-chat-email" placeholder="Email собеседника">
                 <button onclick="startNewChat()">Начать чат</button>
+                <button onclick="loadChats()">Обновить чаты</button>
             </div>
             <ul class="chat-list" id="chat-list"></ul>
         </div>
@@ -304,6 +306,11 @@
                 console.error('Пустой email собеседника');
                 return;
             }
+            if (!window.auth.currentUser) {
+                alert('Вы не авторизованы!');
+                console.error('Пользователь не авторизован');
+                return;
+            }
             if (recipientEmail === window.auth.currentUser.email) {
                 alert('Нельзя начать чат с самим собой!');
                 console.error('Попытка начать чат с самим собой');
@@ -365,10 +372,15 @@
             });
         };
 
-        function loadChats() {
+        window.loadChats = function() {
             console.log('Загрузка чатов для пользователя:', window.auth.currentUser?.uid);
             const chatList = document.getElementById('chat-list');
             chatList.innerHTML = '';
+            if (!window.auth.currentUser) {
+                console.error('Пользователь не авторизован');
+                chatList.innerHTML = '<li>Авторизуйтесь для просмотра чатов</li>';
+                return;
+            }
             const chatsRef = ref(window.db, 'chats');
             onValue(chatsRef, (snapshot) => {
                 chatList.innerHTML = '';
@@ -417,8 +429,9 @@
             }, (error) => {
                 console.error('Ошибка загрузки чатов:', error);
                 alert('Ошибка загрузки чатов: ' + error.message);
+                chatList.innerHTML = '<li>Ошибка загрузки чатов</li>';
             });
-        }
+        };
 
         function loadMessages(chatId) {
             console.log('Загрузка сообщений для чата:', chatId);
