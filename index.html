@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мессенджер с Firebase</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        /* Стили для форм входа и регистрации */
+        .auth-container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 300px;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: #0088cc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #006699;
+        }
+
+        .switch-link {
+            text-align: center;
+            margin-top: 10px;
+            color: #0088cc;
+            cursor: pointer;
+        }
+
+        /* Стили для главной страницы (похоже на Telegram) */
+        #main {
+            display: none;
+            width: 100%;
+            height: 100vh;
+            flex-direction: row;
+        }
+
+        .sidebar {
+            width: 300px;
+            background-color: #fff;
+            border-right: 1px solid #ddd;
+            padding: 10px;
+            overflow-y: auto;
+        }
+
+        .sidebar-header {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .chat-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .chat-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+
+        .chat-item:hover {
+            background-color: #f5f5f5;
+        }
+
+        .chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: #e5ddd5; /* Фон как в Telegram */
+        }
+
+        .chat-header {
+            background-color: #ededed;
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            font-weight: bold;
+        }
+
+        .messages {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+        }
+
+        .message {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            max-width: 60%;
+        }
+
+        .message.sent {
+            background-color: #dcf8c6;
+            align-self: flex-end;
+        }
+
+        .message.received {
+            background-color: #fff;
+            align-self: flex-start;
+        }
+
+        .input-area {
+            display: flex;
+            padding: 10px;
+            background-color: #ededed;
+        }
+
+        .input-area input {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 20px;
+            margin-right: 10px;
+        }
+
+        .input-area button {
+            width: auto;
+            padding: 10px 20px;
+            border-radius: 20px;
+        }
+
+        /* Скрытие секций */
+        #login, #register {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Окно входа -->
+    <div id="login" class="auth-container">
+        <h2>Вход в аккаунт</h2>
+        <input type="email" id="login-email" placeholder="Email">
+        <input type="password" id="login-password" placeholder="Пароль">
+        <button onclick="login()">Войти</button>
+        <div class="switch-link" onclick="showRegister()">Нет аккаунта? Зарегистрироваться</div>
+    </div>
+
+    <!-- Окно регистрации -->
+    <div id="register" class="auth-container">
+        <h2>Регистрация</h2>
+        <input type="email" id="register-email" placeholder="Email">
+        <input type="password" id="register-password" placeholder="Пароль">
+        <button onclick="register()">Зарегистрироваться</button>
+        <div class="switch-link" onclick="showLogin()">Уже есть аккаунт? Войти</div>
+    </div>
+
+    <!-- Главная страница мессенджера -->
+    <div id="main">
+        <div class="sidebar">
+            <div class="sidebar-header">Чаты</div>
+            <ul class="chat-list">
+                <!-- Здесь будут динамически добавляться чаты -->
+                <li class="chat-item" onclick="openChat('chat1')">Чат 1</li>
+                <li class="chat-item" onclick="openChat('chat2')">Чат 2</li>
+                <!-- Добавь больше по мере необходимости -->
+            </ul>
+        </div>
+        <div class="chat-area">
+            <div class="chat-header">Выберите чат</div>
+            <div class="messages" id="messages">
+                <!-- Сообщения будут здесь -->
+            </div>
+            <div class="input-area">
+                <input type="text" id="message-input" placeholder="Введите сообщение...">
+                <button onclick="sendMessage()">Отправить</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Импорт Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+        import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
+
+        // Конфигурация Firebase (замени на свои данные из Firebase консоли)
+        const firebaseConfig = {
+            apiKey: "AIzaSyBKp-HUZXSGSfBfEhl-HIjaC3Yflpqxg7s",
+            authDomain: ".firebaseapp.com",
+            databaseURL: "https://kotogram-9b0b9-default-rtdb.firebaseio.com",
+            projectId: "kotogram-9b0b9",
+            storageBucket: "kotogram-9b0b9.firebasestorage.app",
+            messagingSenderId: "755607509917",
+            appId: "1:755607509917:web:29b1b85eea516bde702d74"
+        };
+
+        // Инициализация Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getDatabase(app);
+
+        // Текущий чат ID (по умолчанию null)
+        let currentChat = null;
+
+        // Показать окно входа по умолчанию
+        document.getElementById('login').style.display = 'block';
+
+        // Функция показа регистрации
+        function showRegister() {
+            document.getElementById('login').style.display = 'none';
+            document.getElementById('register').style.display = 'block';
+        }
+
+        // Функция показа входа
+        function showLogin() {
+            document.getElementById('register').style.display = 'none';
+            document.getElementById('login').style.display = 'block';
+        }
+
+        // Функция регистрации
+        function register() {
+            const email = document.getElementById('register-email').value;
+            const password = document.getElementById('register-password').value;
+            createUserWithEmailAndPassword(auth, email, password)
+                .then((userCredential) => {
+                    alert('Регистрация успешна!');
+                    showMain();
+                })
+                .catch((error) => {
+                    alert(error.message);
+                });
+        }
+
+        // Функция входа
+        function login() {
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            signInWithEmailAndPassword(auth, email, password)
+                .then((userCredential) => {
+                    alert('Вход успешен!');
+                    showMain();
+                })
+                .catch((error) => {
+                    alert(error.message);
+                });
+        }
+
+        // Показать главную страницу
+        function showMain() {
+            document.getElementById('login').style.display = 'none';
+            document.getElementById('register').style.display = 'none';
+            document.getElementById('main').style.display = 'flex';
+            loadChats(); // Загрузить список чатов (пока статично, потом динамично)
+        }
+
+        // Загрузка списка чатов (пока пример, можно расширить с DB)
+        function loadChats() {
+            // Здесь можно загрузить чаты из Firebase Realtime Database
+            // Например, onValue(ref(db, 'chats/' + auth.currentUser.uid), (snapshot) => { ... });
+        }
+
+        // Открытие чата
+        function openChat(chatId) {
+            currentChat = chatId;
+            document.querySelector('.chat-header').textContent = chatId;
+            document.getElementById('messages').innerHTML = '';
+            loadMessages(chatId);
+        }
+
+        // Загрузка сообщений из Realtime Database
+        function loadMessages(chatId) {
+            const messagesRef = ref(db, 'messages/' + chatId);
+            onValue(messagesRef, (snapshot) => {
+                const messagesDiv = document.getElementById('messages');
+                messagesDiv.innerHTML = '';
+                snapshot.forEach((childSnapshot) => {
+                    const message = childSnapshot.val();
+                    const messageElem = document.createElement('div');
+                    messageElem.classList.add('message');
+                    messageElem.classList.add(message.sender === auth.currentUser.uid ? 'sent' : 'received');
+                    messageElem.textContent = message.text;
+                    messagesDiv.appendChild(messageElem);
+                });
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            });
+        }
+
+        // Отправка сообщения
+        function sendMessage() {
+            if (!currentChat) {
+                alert('Выберите чат!');
+                return;
+            }
+            const input = document.getElementById('message-input');
+            const text = input.value.trim();
+            if (text) {
+                const messagesRef = ref(db, 'messages/' + currentChat);
+                push(messagesRef, {
+                    sender: auth.currentUser.uid,
+                    text: text,
+                    timestamp: Date.now()
+                });
+                input.value = '';
+            }
+        }
+    </script>
+</body>
+</html>
