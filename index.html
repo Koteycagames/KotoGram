@@ -148,6 +148,10 @@
         #login, #register {
             display: none;
         }
+
+        .new-chat {
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 <body>
@@ -174,13 +178,14 @@
     <div id="main">
         <div class="sidebar">
             <div class="sidebar-header">Чаты</div>
-            <ul class="chat-list">
-                <li class="chat-item" onclick="openChat('chat1')">Чат 1</li>
-                <li class="chat-item" onclick="openChat('chat2')">Чат 2</li>
-            </ul>
+            <div class="new-chat">
+                <input type="email" id="new-chat-email" placeholder="Email собеседника">
+                <button onclick="startNewChat()">Начать чат</button>
+            </div>
+            <ul class="chat-list" id="chat-list"></ul>
         </div>
         <div class="chat-area">
-            <div class="chat-header">Выберите чат</div>
+            <div class="chat-header" id="chat-header">Выберите чат</div>
             <div class="messages" id="messages"></div>
             <div class="input-area">
                 <input type="text" id="message-input" placeholder="Введите сообщение...">
@@ -192,7 +197,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-        import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+        import { getDatabase, ref, push, onValue, set, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBKp-HUZXSGSfBfEhl-HIjaC3Yflpqxg7s",
@@ -215,6 +220,7 @@
         }
 
         let currentChat = null;
+        let currentChatPartnerEmail = '';
 
         document.getElementById('login').style.display = 'block';
 
@@ -242,8 +248,18 @@
             createUserWithEmailAndPassword(window.auth, email, password)
                 .then((userCredential) => {
                     console.log('Регистрация успешна:', userCredential.user.email);
-                    alert('Регистрация успешна!');
-                    showMain();
+                    // Сохраняем email и UID в базе
+                    const userRef = ref(window.db, 'users/' + userCredential.user.uid);
+                    set(userRef, { email: email })
+                        .then(() => {
+                            console.log('Пользователь сохранён в базе:', email);
+                            alert('Регистрация успешна!');
+                            showMain();
+                        })
+                        .catch((error) => {
+                            console.error('Ошибка сохранения пользователя:', error);
+                            alert('Ошибка сохранения пользователя: ' + error.message);
+                        });
                 })
                 .catch((error) => {
                     console.error('Ошибка регистрации:', error.code, error.message);
@@ -280,18 +296,93 @@
             loadChats();
         }
 
+        window.startNewChat = function() {
+            console.log('Начать новый чат');
+            const recipientEmail = document.getElementById('new-chat-email').value.trim();
+            if (!recipientEmail) {
+                alert('Введите email собеседника!');
+                console.error('Пустой email собеседника');
+                return;
+            }
+            if (recipientEmail === window.auth.currentUser.email) {
+                alert('Нельзя начать чат с самим собой!');
+                console.error('Попытка начать чат с самим собой');
+                return;
+            }
+
+            // Проверяем, существует ли пользователь с таким email
+            get(ref(window.db, 'users')).then((snapshot) => {
+                let recipientUid = null;
+                snapshot.forEach((childSnapshot) => {
+                    if (childSnapshot.val().email === recipientEmail) {
+                        recipientUid = childSnapshot.key;
+                    }
+                });
+                if (!recipientUid) {
+                    alert('Пользователь с таким email не найден!');
+                    console.error('Пользователь не найден:', recipientEmail);
+                    return;
+                }
+
+                // Создаём уникальный ID чата
+                const chatId = [window.auth.currentUser.uid, recipientUid].sort().join('_');
+                const chatRef = ref(window.db, 'chats/' + chatId);
+                set(chatRef, {
+                    participants: {
+                        [window.auth.currentUser.uid]: true,
+                        [recipientUid]: true
+                    },
+                    lastMessage: '',
+                    timestamp: Date.now()
+                }).then(() => {
+                    console.log('Чат создан:', chatId);
+                    document.getElementById('new-chat-email').value = '';
+                    loadChats();
+                }).catch((error) => {
+                    console.error('Ошибка создания чата:', error);
+                    alert('Ошибка создания чата: ' + error.message);
+                });
+            }).catch((error) => {
+                console.error('Ошибка проверки пользователя:', error);
+                alert('Ошибка проверки пользователя: ' + error.message);
+            });
+        };
+
         function loadChats() {
             console.log('Загрузка чатов');
-            // Динамическая загрузка чатов из Firebase (пока заглушка)
+            const chatList = document.getElementById('chat-list');
+            chatList.innerHTML = '';
+            const chatsRef = ref(window.db, 'chats');
+            onValue(chatsRef, (snapshot) => {
+                chatList.innerHTML = '';
+                snapshot.forEach((childSnapshot) => {
+                    const chatId = childSnapshot.key;
+                    const chatData = childSnapshot.val();
+                    if (chatData.participants[window.auth.currentUser.uid]) {
+                        // Находим email собеседника
+                        const participantIds = Object.keys(chatData.participants);
+                        const otherUserId = participantIds.find(id => id !== window.auth.currentUser.uid);
+                        get(ref(window.db, 'users/' + otherUserId)).then((userSnapshot) => {
+                            const otherUserEmail = userSnapshot.val().email;
+                            const li = document.createElement('li');
+                            li.classList.add('chat-item');
+                            li.textContent = otherUserEmail;
+                            li.onclick = () => {
+                                currentChat = chatId;
+                                currentChatPartnerEmail = otherUserEmail;
+                                document.getElementById('chat-header').textContent = otherUserEmail;
+                                document.getElementById('messages').innerHTML = '';
+                                loadMessages(chatId);
+                            };
+                            chatList.appendChild(li);
+                        });
+                    }
+                });
+            }, (error) => {
+                console.error('Ошибка загрузки чатов:', error);
+                alert('Ошибка загрузки чатов: ' + error.message);
+            });
         }
-
-        window.openChat = function(chatId) {
-            console.log('Открытие чата:', chatId);
-            currentChat = chatId;
-            document.querySelector('.chat-header').textContent = chatId;
-            document.getElementById('messages').innerHTML = '';
-            loadMessages(chatId);
-        };
 
         function loadMessages(chatId) {
             console.log('Загрузка сообщений для чата:', chatId);
@@ -331,6 +422,16 @@
                     timestamp: Date.now()
                 }).then(() => {
                     console.log('Сообщение отправлено');
+                    // Обновляем lastMessage в чате
+                    const chatRef = ref(window.db, 'chats/' + currentChat);
+                    set(chatRef, {
+                        participants: {
+                            [window.auth.currentUser.uid]: true,
+                            [Object.keys(get(ref(window.db, 'chats/' + currentChat)).then(s => s.val().participants)).find(id => id !== window.auth.currentUser.uid)]: true
+                        },
+                        lastMessage: text,
+                        timestamp: Date.now()
+                    });
                     input.value = '';
                 }).catch((error) => {
                     console.error('Ошибка отправки сообщения:', error);
