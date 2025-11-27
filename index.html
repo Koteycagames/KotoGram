@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kotogram Messenger</title>
+    <style>
+        body { font-family: sans-serif; background: #f0f2f5; margin: 0; display: flex; justify-content: center; height: 100vh; }
+        .container { width: 100%; max-width: 500px; background: white; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
+        
+        /* Стили для переключения экранов */
+        .screen { display: none; height: 100%; flex-direction: column; }
+        .screen.active { display: flex; }
+
+        input, button { margin: 10px 0; padding: 10px; border-radius: 5px; border: 1px solid #ccc; width: 100%; box-sizing: border-box; }
+        button { background: #0088cc; color: white; border: none; cursor: pointer; font-weight: bold; }
+        button:hover { background: #0077b5; }
+        .secondary-btn { background: #6c757d; }
+
+        /* Чат */
+        #messages-list { flex-grow: 1; overflow-y: auto; padding: 10px; background: #e5ddd5; margin-bottom: 10px; border-radius: 5px; display: flex; flex-direction: column; gap: 8px; }
+        .msg { padding: 8px 12px; border-radius: 10px; max-width: 80%; word-wrap: break-word; }
+        .msg.my { background: #dcf8c6; align-self: flex-end; }
+        .msg.other { background: white; align-self: flex-start; }
+        .msg-info { font-size: 0.7em; color: #777; margin-top: 4px; text-align: right; }
+        
+        .user-info-panel { background: #eee; padding: 10px; margin-bottom: 10px; border-radius: 5px; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="login-screen" class="screen active">
+        <h2>Вход в Kotogram</h2>
+        <input type="email" id="login-email" placeholder="Email">
+        <input type="password" id="login-password" placeholder="Пароль">
+        <button id="btn-login">Войти</button>
+        <button id="btn-to-register" class="secondary-btn">Нет аккаунта? Регистрация</button>
+    </div>
+
+    <div id="register-screen" class="screen">
+        <h2>Регистрация</h2>
+        <input type="text" id="reg-name" placeholder="Ваше имя">
+        <input type="date" id="reg-dob" placeholder="Дата рождения">
+        <input type="email" id="reg-email" placeholder="Email">
+        <input type="password" id="reg-password" placeholder="Пароль">
+        <button id="btn-register">Зарегистрироваться</button>
+        <button id="btn-to-login" class="secondary-btn">Назад ко входу</button>
+    </div>
+
+    <div id="chat-screen" class="screen">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3 id="current-user-name">Загрузка...</h3>
+            <button id="btn-logout" style="width: auto; padding: 5px 10px; font-size: 0.8em; background: #dc3545;">Выйти</button>
+        </div>
+
+        <div class="user-info-panel">
+            <label>Найти собеседника по Email:</label>
+            <div style="display: flex; gap: 5px;">
+                <input type="text" id="search-email" placeholder="email друга..." style="margin:0;">
+                <button id="btn-search" style="margin:0; width: 80px;">Поиск</button>
+            </div>
+            <div id="search-result" style="margin-top:5px; color: green; font-weight: bold;"></div>
+        </div>
+
+        <div id="messages-list">
+            <div style="text-align: center; color: gray; margin-top: 20px;">
+                Найдите пользователя и начните общение
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 5px;">
+            <input type="text" id="msg-input" placeholder="Сообщение..." style="margin:0;">
+            <button id="btn-send" style="margin:0; width: 80px;">Send</button>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    // Импорт функций из CDN (без сборщика)
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getDatabase, ref, set, push, onValue, query, orderByChild, equalTo, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    // Конфигурация
+    const firebaseConfig = {
+        apiKey: "AIzaSyBKp-HUZXSGSfBfEhl-HIjaC3Yflpqxg7s",
+        authDomain: "kotogram-9b0b9.firebaseapp.com",
+        databaseURL: "https://kotogram-9b0b9-default-rtdb.firebaseio.com",
+        projectId: "kotogram-9b0b9",
+        storageBucket: "kotogram-9b0b9.firebasestorage.app",
+        messagingSenderId: "755607509917",
+        appId: "1:755607509917:web:29b1b85eea516bde702d74"
+    };
+
+    // Инициализация
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getDatabase(app);
+
+    let currentUser = null;
+    let currentChatId = null; // ID комнаты чата
+    let chatPartnerId = null; // ID собеседника
+
+    // --- DOM Элементы ---
+    const screens = {
+        login: document.getElementById('login-screen'),
+        register: document.getElementById('register-screen'),
+        chat: document.getElementById('chat-screen')
+    };
+
+    // --- Навигация ---
+    function showScreen(name) {
+        Object.values(screens).forEach(s => s.classList.remove('active'));
+        screens[name].classList.add('active');
+    }
+
+    document.getElementById('btn-to-register').onclick = () => showScreen('register');
+    document.getElementById('btn-to-login').onclick = () => showScreen('login');
+
+    // --- ЛОГИКА АВТОРИЗАЦИИ ---
+
+    // Регистрация
+    document.getElementById('btn-register').onclick = async () => {
+        const email = document.getElementById('reg-email').value;
+        const pass = document.getElementById('reg-password').value;
+        const name = document.getElementById('reg-name').value;
+        const dob = document.getElementById('reg-dob').value;
+
+        if(!email || !pass || !name) return alert("Заполните все поля");
+
+        try {
+            const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+            const user = userCredential.user;
+
+            // Сохраняем доп. данные в Realtime Database
+            await set(ref(db, 'users/' + user.uid), {
+                username: name,
+                email: email,
+                dob: dob,
+                uid: user.uid
+            });
+            
+            alert("Успешная регистрация!");
+        } catch (error) {
+            alert("Ошибка: " + error.message);
+        }
+    };
+
+    // Вход
+    document.getElementById('btn-login').onclick = async () => {
+        const email = document.getElementById('login-email').value;
+        const pass = document.getElementById('login-password').value;
+        try {
+            await signInWithEmailAndPassword(auth, email, pass);
+        } catch (error) {
+            alert("Ошибка входа: " + error.message);
+        }
+    };
+
+    // Выход
+    document.getElementById('btn-logout').onclick = () => signOut(auth);
+
+    // Слушатель состояния (вошел/вышел)
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            currentUser = user;
+            showScreen('chat');
+            document.getElementById('current-user-name').innerText = user.email;
+            // Загружаем имя пользователя из базы
+            get(ref(db, 'users/' + user.uid)).then((snapshot) => {
+                if(snapshot.exists()) {
+                    document.getElementById('current-user-name').innerText = snapshot.val().username;
+                }
+            });
+        } else {
+            currentUser = null;
+            showScreen('login');
+            currentChatId = null;
+            document.getElementById('messages-list').innerHTML = '';
+        }
+    });
+
+    // --- ЛОГИКА ПОИСКА И ЧАТА ---
+
+    // 1. Поиск пользователя по Email
+    document.getElementById('btn-search').onclick = async () => {
+        const emailToFind = document.getElementById('search-email').value;
+        if(emailToFind === currentUser.email) return alert("Это ваша почта!");
+
+        const usersRef = ref(db, 'users');
+        // Запрос к базе: найти пользователя, где email == введенному
+        const q = query(usersRef, orderByChild('email'), equalTo(emailToFind));
+
+        try {
+            const snapshot = await get(q);
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                const userId = Object.keys(data)[0]; // Получаем UID найденного юзера
+                const userInfo = data[userId];
+
+                chatPartnerId = userId;
+                document.getElementById('search-result').innerText = `Найден: ${userInfo.username} (${userInfo.dob})`;
+                
+                // Генерируем уникальный ID чата (всегда одинаковый для пары людей)
+                // Сортируем UID, чтобы user1+user2 и user2+user1 давали один и тот же ID чата
+                const ids = [currentUser.uid, chatPartnerId].sort();
+                currentChatId = ids[0] + "_" + ids[1];
+
+                loadMessages(); // Загружаем историю
+            } else {
+                document.getElementById('search-result').innerText = "Пользователь не найден.";
+                chatPartnerId = null;
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Ошибка поиска. Проверьте Rules в консоли Firebase.");
+        }
+    };
+
+    // 2. Загрузка и прослушивание сообщений
+    function loadMessages() {
+        if(!currentChatId) return;
+        const messagesList = document.getElementById('messages-list');
+        messagesList.innerHTML = ''; // Очистка
+
+        const messagesRef = ref(db, 'messages/' + currentChatId);
+        
+        // onValue слушает изменения в реальном времени
+        onValue(messagesRef, (snapshot) => {
+            messagesList.innerHTML = ''; // Перерисовка (можно оптимизировать, но для старта ок)
+            const data = snapshot.val();
+            
+            if (data) {
+                Object.values(data).forEach(msg => {
+                    const div = document.createElement('div');
+                    const isMy = msg.senderId === currentUser.uid;
+                    div.className = `msg ${isMy ? 'my' : 'other'}`;
+                    div.innerHTML = `
+                        ${msg.text}
+                        <div class="msg-info">${new Date(msg.timestamp).toLocaleTimeString()}</div>
+                    `;
+                    messagesList.appendChild(div);
+                });
+                // Прокрутка вниз
+                messagesList.scrollTop = messagesList.scrollHeight;
+            } else {
+                messagesList.innerHTML = '<div style="text-align:center; color:gray">Сообщений пока нет</div>';
+            }
+        });
+    }
+
+    // 3. Отправка сообщения
+    document.getElementById('btn-send').onclick = () => {
+        const input = document.getElementById('msg-input');
+        const text = input.value;
+
+        if (!text || !currentChatId) return;
+
+        const messagesRef = ref(db, 'messages/' + currentChatId);
+        const newMessageRef = push(messagesRef); // Создаем новый ключ
+
+        set(newMessageRef, {
+            senderId: currentUser.uid,
+            text: text,
+            timestamp: Date.now()
+        });
+
+        input.value = '';
+    };
+</script>
+
+</body>
+</html>
